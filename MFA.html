@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureAuth Gateway · MFA Login Demo</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a2e; --panel-2:#0e1526; --line:#22304d;
+    --text:#e6edf7; --muted:#8b9ab5;
+    --accent:#38bdf8; --accent-2:#6366f1;
+    --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; padding:28px 16px;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color:var(--text);
+    background:
+      radial-gradient(1100px 560px at 18% -12%, #16244a 0%, rgba(11,16,32,0) 60%),
+      radial-gradient(900px 500px at 100% 0%, #1b1740 0%, rgba(11,16,32,0) 55%),
+      var(--bg);
+    display:flex; justify-content:center;
+  }
+  .app{width:100%; max-width:1100px}
+  header.top{display:flex; align-items:center; gap:12px; margin-bottom:20px}
+  header.top .dot{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 12px var(--ok)}
+  header.top h1{font-size:15px; margin:0; letter-spacing:.3px; font-weight:600}
+  header.top .sub{color:var(--muted); font-size:12px}
+  main{display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr); gap:20px; align-items:start}
+  @media (max-width:900px){ main{grid-template-columns:1fr} }
+
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line); border-radius:16px; padding:26px;
+    box-shadow:0 18px 50px rgba(0,0,0,.35);
+  }
+  .stage{animation:fade .28s ease}
+  @keyframes fade{from{opacity:0; transform:translateY(6px)} to{opacity:1;transform:none}}
+  .hidden{display:none !important}
+
+  .brand{display:flex; gap:14px; align-items:center; margin-bottom:22px}
+  .logo{
+    width:46px;height:46px;border-radius:12px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    color:#04121f; font-size:22px; font-weight:700;
+  }
+  .brand h2{margin:0; font-size:19px; letter-spacing:.2px}
+  .brand p{margin:3px 0 0; font-size:12.5px; color:var(--muted)}
+
+  label{display:block; font-size:12.5px; color:var(--muted); margin:14px 0 6px; font-weight:500}
+  input[type=text],input[type=password],input[type=email]{
+    width:100%; padding:12px 14px; border-radius:10px;
+    background:#0c1322; border:1px solid #24314f; color:var(--text);
+    font-size:14.5px; font-family:inherit; outline:none; transition:border-color .15s, box-shadow .15s;
+  }
+  input:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(56,189,248,.14)}
+  .code-input{
+    font-family:var(--mono); font-size:26px; letter-spacing:.42em; text-align:center;
+    padding:14px 10px 14px 20px;
+  }
+
+  .btn{
+    width:100%; padding:12px 16px; border-radius:10px; border:1px solid transparent;
+    font-size:14.5px; font-weight:600; font-family:inherit; cursor:pointer;
+    transition:transform .12s, filter .15s, background .15s;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{
+    margin-top:20px; color:#04121f;
+    background:linear-gradient(135deg,var(--accent),#5eead4);
+    box-shadow:0 8px 22px rgba(56,189,248,.22);
+  }
+  .btn.primary:hover{filter:brightness(1.07)}
+  .btn.ghost{
+    background:#0e1729; border-color:#26344f; color:#b9c6de; font-weight:500;
+  }
+  .btn.ghost:hover{background:#132038; color:#e6edf7}
+  .btn.tiny{
+    width:auto; padding:6px 11px; font-size:11.5px; border-radius:8px;
+    background:#231b3a; border:1px dashed #6d5aa8; color:#c4b5fd; font-weight:600; letter-spacing:.4px;
+  }
+  .row{display:flex; gap:10px; margin-top:10px}
+  .row .btn{margin-top:0}
+
+  .msg{margin-top:14px; padding:10px 13px; border-radius:9px; font-size:13px; line-height:1.45}
+  .msg.error{background:rgba(248,113,113,.1); border:1px solid rgba(248,113,113,.32); color:#fca5a5}
+  .msg.ok{background:rgba(52,211,153,.1); border:1px solid rgba(52,211,153,.32); color:#6ee7b7}
+
+  .hint{margin-top:20px; padding-top:16px; border-top:1px dashed #22304d; font-size:12px; color:var(--muted); line-height:1.7}
+  code{font-family:var(--mono); background:#0c1322; border:1px solid #24314f; padding:1.5px 6px; border-radius:6px; color:#a5d8ff; font-size:11.5px}
+
+  .totp-window{margin-top:14px}
+  .bar{height:5px; border-radius:99px; background:#1a2440; overflow:hidden}
+  .bar span{display:block; height:100%; width:0; background:var(--accent); border-radius:99px; transition:width .2s linear, background .2s}
+  .small{font-size:11.5px}
+  .muted{color:var(--muted)}
+  .mono{font-family:var(--mono)}
+  .totp-window .small{display:block; margin-top:7px}
+
+  .check{display:flex; align-items:center; gap:9px; margin-top:16px; font-size:12.5px; color:var(--muted); cursor:pointer}
+  .check input{accent-color:var(--accent); width:15px; height:15px}
+
+  .demo-tool{
+    margin-top:20px; padding-top:16px; border-top:1px dashed #22304d;
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  }
+  #revealed-code{font-size:19px; letter-spacing:.16em; color:#fbbf24; font-weight:700}
+
+  /* enrollment */
+  .enroll-grid{display:grid; grid-template-columns:168px 1fr; gap:18px; align-items:start; margin:16px 0 4px}
+  @media (max-width:520px){ .enroll-grid{grid-template-columns:1fr} }
+  .qr{
+    width:168px; height:168px; border-radius:12px; background:#e6edf7;
+    display:grid; place-items:center; overflow:hidden; padding:6px;
+  }
+  .qr canvas{width:100% !important; height:100% !important; display:block}
+  #qr-fallback{font-size:8.5px; color:#0b1020; word-break:break-all; line-height:1.35; padding:6px; text-align:left}
+  .secret{
+    background:#0c1322; border:1px solid #24314f; border-radius:9px; padding:11px 13px;
+    font-size:12.5px; letter-spacing:.13em; color:#7dd3fc; word-break:break-all; margin:6px 0 8px;
+  }
+
+  .backup-codes{display:grid; grid-template-columns:repeat(2,1fr); gap:9px; margin:16px 0 4px}
+  .backup-codes div{
+    background:#0c1322; border:1px solid #24314f; border-radius:9px; padding:10px;
+    text-align:center; font-family:var(--mono); font-size:13.5px; letter-spacing:.1em; color:#a7f3d0;
+  }
+  .backup-codes div.used{opacity:.32; text-decoration:line-through}
+
+  /* dashboard */
+  .kv{margin:18px 0 0; display:grid; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+  .kv > div{display:grid; grid-template-columns:130px 1fr; gap:12px; background:#0f172a; padding:11px 14px}
+  .kv dt{font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; margin:0}
+  .kv dd{margin:0; font-size:13px; word-break:break-all}
+  .badge{display:inline-block; padding:2px 9px; border-radius:99px; font-size:11px; font-weight:600; letter-spacing:.3px}
+  .badge.ok{background:rgba(52,211,153,.14); color:#6ee7b7; border:1px solid rgba(52,211,153,.3)}
+
+  /* console */
+  .console h3{margin:0 0 4px; font-size:13.5px; letter-spacing:.4px; text-transform:uppercase; color:#9fb3d1}
+  .console .cap{font-size:11.5px; color:var(--muted); margin-bottom:14px}
+  #audit{list-style:none; margin:0; padding:0; max-height:290px; overflow-y:auto; display:flex; flex-direction:column; gap:6px}
+  #audit::-webkit-scrollbar{width:7px}
+  #audit::-webkit-scrollbar-thumb{background:#24314f; border-radius:99px}
+  .log-item{
+    display:flex; gap:9px; align-items:baseline; font-size:12px; line-height:1.5;
+    padding:8px 11px; border-radius:8px; background:#0d1526; border-left:2px solid #24314f;
+    animation:fade .2s ease;
+  }
+  .log-item .log-time{font-family:var(--mono); font-size:10.5px; color:#5f7295; flex:0 0 auto}
+  .log-item .log-msg{color:#b9c6de}
+  .log-item.success{border-left-color:var(--ok)} .log-item.success .log-msg{color:#6ee7b7}
+  .log-item.error{border-left-color:var(--err)} .log-item.error .log-msg{color:#fca5a5}
+  .log-item.warn{border-left-color:var(--warn)} .log-item.warn .log-msg{color:#fcd34d}
+  .notes{margin-top:20px; padding-top:18px; border-top:1px solid var(--line)}
+  .notes h4{margin:0 0 10px; font-size:11.5px; text-transform:uppercase; letter-spacing:.8px; color:#9fb3d1}
+  .notes ul{margin:0; padding-left:17px; font-size:12px; color:var(--muted); line-height:1.75}
+  .notes li{margin-bottom:6px}
+  .notes b{color:#c7d5ec; font-weight:600}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <span class="dot"></span>
+    <h1>SecureAuth Gateway</h1>
+    <span class="sub">· identity provider node <span class="mono">eu-west-1a</span> · policy <span class="mono">MFA-required</span></span>
+  </header>
+
+  <main>
+    <!-- ===================== AUTH PANEL ===================== -->
+    <section class="panel">
+
+      <!-- ---------- STAGE 1: PASSWORD ---------- -->
+      <div class="stage" id="stage-login">
+        <div class="brand">
+          <div class="logo">◈</div>
+          <div>
+            <h2>Sign in</h2>
+            <p>Step 1 of 2 — knowledge factor</p>
+          </div>
+        </div>
+
+        <form id="login-form" autocomplete="off">
+          <label for="username">Username</label>
+          <input id="username" type="text" value="alice" autocomplete="username" spellcheck="false" required>
+
+          <label for="password">Password</label>
+          <input id="password" type="password" value="CorrectHorseBattery9" autocomplete="current-password" required>
+
+          <div class="msg error hidden" id="login-error"></div>
+          <button class="btn primary" type="submit">Continue →</button>
+        </form>
+
+        <div class="hint">
+          <b>Demo accounts</b><br>
+          <code>alice / CorrectHorseBattery9</code> — MFA enrolled<br>
+          <code>bob / hunter2</code> — no second factor yet (enrollment will be forced)
+        </div>
+      </div>
+
+      <!-- ---------- STAGE 2: MFA CHALLENGE ---------- -->
+      <div class="stage hidden" id="stage-mfa">
+        <div class="brand">
+          <div class="logo">🔐</div>
+          <div>
+            <h2>Two-factor authentication</h2>
+            <p>Step 2 of 2 — possession factor · <span id="mfa-user"></span></p>
+          </div>
+        </div>
+
+        <form id="mfa-form" autocomplete="off">
+          <label for="otp" id="otp-label">6-digit code from your authenticator app</label>
+          <input id="otp" class="code-input" type="text" inputmode="numeric" maxlength="6"
+                placeholder="000000" autocomplete="one-time-code" spellcheck="false">
+
+          <div class="totp-window" id="totp-window">
+            <div class="bar"><span id="totp-bar"></span></div>
+            <span class="small muted">Time step expires in <b id="totp-remaining">30</b>s · tolerance ±1 step</span>
+          </div>
+
+          <div class="msg error hidden" id="mfa-error"></div>
+
+          <label class="check">
+            <input type="checkbox" id="trust-device">
+            Remember this device for 30 days (device-trust token)
+          </label>
+
+          <button class="btn primary" type="submit">Verify &amp; sign in</button>
+        </form>
+
+        <div class="row">
+          <button class="btn ghost" id="mfa-back" type="button">← Back</button>
+          <button class="btn ghost" id="mfa-backup-toggle" type="button">Use a backup code</button>
+        </div>
+
+        <div class="demo-tool">
+          <button class="btn tiny" id="reveal-code" type="button">DEMO HELPER</button>
+          <span id="revealed-code" class="mono"></span>
+        </div>
+      </div>
+
+      <!-- ---------- STAGE 3: ENROLLMENT ---------- -->
+      <div class="stage hidden" id="stage-enroll">
+        <div class="brand">
+          <div class="logo">⚙</div>
+          <div>
+            <h2>Enroll a second factor</h2>
+            <p>Policy requires MFA before a session is issued</p>
+          </div>
+        </div>
+
+        <p class="small muted" style="margin:0 0 4px">
+          Scan this with Google Authenticator, Authy, 1Password, or any RFC&nbsp;6238 app —
+          or enter the key manually.
+        </p>
+
+        <div class="enroll-grid">
+          <div class="qr"><canvas id="qr-canvas"></canvas><div id="qr-fallback"></div></div>
+          <div>
+            <span class="small muted">Shared secret (Base32)</span>
+            <div class="secret" id="enroll-secret"></div>
+            <p class="small muted" style="margin:0">SHA-1 · 6 digits · 30-second period</p>
+          </div>
+        </div>
+
+        <form id="enroll-form" autocomplete="off">
+          <label for="enroll-otp">Confirm with the 6-digit code from the app</label>
+          <input id="enroll-otp" class="code-input" type="text" inputmode="numeric" maxlength="6"
+placeholder="000000" spellcheck="false">
+          <div class="msg error hidden" id="enroll-error"></div>
+          <button class="btn primary" type="submit">Activate MFA</button>
+        </form>
+      </div>
+
+      <!-- ---------- STAGE 4: BACKUP CODES ---------- -->
+      <div class="stage hidden" id="stage-backup">
+        <div class="brand">
+          <div class="logo">🗝</div>
+          <div>
+            <h2>Save your backup codes</h2>
+            <p>Single-use recovery credentials</p>
+          </div>
+        </div>
+
+        <p class="small muted" style="margin:0">
+          Each code works exactly once. Store them offline — they are your only way in
+          if you lose the authenticator device.
+        </p>
+
+        <div class="backup-codes" id="backup-codes"></div>
+
+        <button class="btn primary" id="backup-continue" type="button">I've saved them — continue</button>
+      </div>
+
+      <!-- ---------- STAGE 5: SESSION ---------- -->
+      <div class="stage hidden" id="stage-dashboard">
+        <div class="brand">
+          <div class="logo">✓</div>
+          <div>
+            <h2>Authenticated</h2>
+            <p>Session token issued &amp; propagated to relying services</p>
+          </div>
+        </div>
+
+        <dl class="kv">
+          <div><dt>Subject</dt><dd id="dash-user"></dd></div>
+          <div><dt>Assurance</dt><dd><span class="badge ok" id="dash-assurance"></span></dd></div>
+          <div><dt>Session token</dt><dd class="mono" id="dash-token"></dd></div>
+          <div><dt>Expires in</dt><dd id="dash-expiry"></dd></div>
+          <div><dt>Trusted device</dt><dd id="dash-device"></dd></div>
+        </dl>
+
+        <div class="row" style="margin-top:18px">
+          <button class="btn ghost" id="signout" type="button">Sign out</button>
+          <button class="btn ghost" id="revoke-device" type="button">Revoke trusted device</button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ===================== CONSOLE PANEL ===================== -->
+    <aside class="panel console">
+      <h3>Security event log</h3>
+      <div class="cap">Streamed from the authentication service</div>
+      <ul id="audit"></ul>
+
+      <div class="notes">
+        <h4>Why this matters in a distributed system</h4>
+        <ul>
+          <li><b>Central IdP, stateless tokens.</b> Services never see the password — they validate a short-lived bearer token, so a compromise of one node doesn't leak credentials.</li>
+          <li><b>Clock skew.</b> TOTP depends on synchronized clocks across nodes; this verifier tolerates ±1 time step (RFC 6238 §5.2).</li>
+          <li><b>Replay protection.</b> A code is bound to its time step and rejected if reused, defeating interception of a valid OTP.</li>
+          <li><b>Rate limiting.</b> Lockout after repeated failures blunts credential-stuffing across the fleet.</li>
+          <li><b>Recovery paths.</b> Backup codes and device trust are deliberate trade-offs — each widens the attack surface in exchange for availability.</li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<!-- Optional: QR rendering. If it fails to load, the otpauth:// URI is shown instead. -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script>
+/* =====================================================================
+   1. TOTP CORE — RFC 6238 / RFC 4226, pure JS (no network dependency)
+   ===================================================================== */
+const B32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const enc = new TextEncoder();
+
+function concat(a, b) {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0); out.set(b, a.length);
+  return out;
+}
+
+function sha1(bytes) {
+  const ml = bytes.length * 8;
+  const padded = new Uint8Array((((bytes.length + 8) >> 6) + 1) * 64);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const dv = new DataView(padded.buffer);
+  dv.setUint32(padded.length - 4, ml >>> 0, false);
+  dv.setUint32(padded.length - 8, Math.floor(ml / 4294967296), false);
+
+  let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+  const w = new Uint32Array(80);
+
+  for (let i = 0; i < padded.length; i += 64) {
+    for (let j = 0; j < 16; j++) w[j] = dv.getUint32(i + j * 4, false);
+    for (let j = 16; j < 80; j++) {
+      const v = w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16];
+      w[j] = (v << 1) | (v >>> 31);
+    }
+    let a = h0, b = h1, c = h2, d = h3, e = h4;
+    for (let j = 0; j < 80; j++) {
+      let f, k;
+      if (j < 20)      { f = (b & c) | (~b & d);            k = 0x5A827999; }
+      else if (j < 40) { f = b ^ c ^ d;                     k = 0x6ED9EBA1; }
+      else if (j < 60) { f = (b & c) | (b & d) | (c & d);   k = 0x8F1BBCDC; }
+      else             { f = b ^ c ^ d;                     k = 0xCA62C1D6; }
+      const tmp = ((((a << 5) | (a >>> 27)) >>> 0) + f + e + k + w[j]) >>> 0;
+      e = d; d = c; c = (b << 30) | (b >>> 2); b = a; a = tmp;
+    }
+    h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0;
+    h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+  }
+
+  const out = new Uint8Array(20);
+  const odv = new DataView(out.buffer);
+  odv.setUint32(0, h0, false); odv.setUint32(4, h1, false); odv.setUint32(8, h2, false);
+  odv.setUint32(12, h3, false); odv.setUint32(16, h4, false);
+  return out;
+}
+
+function hmacSha1(key, msg) {
+  if (key.length > 64) key = sha1(key);
+  const k = new Uint8Array(64); k.set(key);
+  const ipad = new Uint8Array(64), opad = new Uint8Array(64);
+  for (let i = 0; i < 64; i++) { ipad[i] = k[i] ^ 0x36; opad[i] = k[i] ^ 0x5c; }
+  return sha1(concat(opad, sha1(concat(ipad, msg))));
+}
+
+function base32Decode(input) {
+  const s = String(input).replace(/=+$/, '').replace(/[\s-]/g, '').toUpperCase();
+  let bits = 0, value = 0;
+  const out = [];
+  for (const ch of s) {
+    const idx = B32_ALPHABET.indexOf(ch);
+    if (idx === -1) continue;
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
+  }
+  return new Uint8Array(out);
+}
+
+function hotp(keyBytes, counter, digits = 6) {
+  const buf = new Uint8Array(8);
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(0, Math.floor(counter / 4294967296), false);
+  dv.setUint32(4, counter >>> 0, false);
+  const h = hmacSha1(keyBytes, buf);
+  const off = h[h.length - 1] & 0x0f;                     // dynamic truncation
+  const bin = ((h[off] & 0x7f) << 24) | (h[off + 1] << 16) | (h[off + 2] << 8) | h[off + 3];
+  return String(bin % 10 ** digits).padStart(digits, '0');
+}
+
+const STEP_MS = 30000;
+
+function totpAt(keyBytes, atMs = Date.now(), digits = 6) {
+  return hotp(keyBytes, Math.floor(atMs / STEP_MS), digits);
+}
+
+/** Returns the matched time-step index, or null. Window = ±1 step for clock skew. */
+function verifyTotp(secretB32, code, window = 1) {
+  const key = base32Decode(secretB32);
+  const step = Math.floor(Date.now() / STEP_MS);
+  for (let i = -window; i <= window; i++) {
+    if (totpAt(key, (step + i) * STEP_MS) === code) return step + i;
+  }
+  return null;
+}
+
+/* =====================================================================
+   2. HELPERS
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+
+function randomToken(bytes = 32) {
+  const a = new Uint8Array(bytes);
+  crypto.getRandomValues(a);
+  return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function randomBase32(len = 32) {
+  const a = new Uint8Array(len);
+  crypto.getRandomValues(a);
+  return Array.from(a, b => B32_ALPHABET[b % 32]).join('');
+}
+
+function generateBackupCode() {
+  const a = new Uint8Array(8);
+  crypto.getRandomValues(a);
+  const s = Array.from(a, b => B32_ALPHABET[b % 32]).join('');
+  return s.slice(0, 4) + '-' + s.slice(4, 8);
+}
+
+/** Constant-time-ish comparison (avoids early-exit side channels on equal-length inputs). */
+function timingSafeEqual(a, b) {
+  const ab = enc.encode(a), bb = enc.encode(b);
+  if (ab.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ab.length; i++) diff |= ab[i] ^ bb[i];
+  return diff === 0;
+}
+
+/* =====================================================================
+   3. SIMULATED IDENTITY STORE  (would be a replicated user directory)
+   ===================================================================== */
+const USERS = {
+  alice: {
+    name: 'Alice Nguyen', role: 'Security Engineer',
+    password: 'CorrectHorseBattery9',
+    mfaEnrolled: true,
+    secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+    backupCodes: ['4F2A-9C1B', 'B7D3-1E8A', '9K4M-2P6Q', 'Z1X8-7C3V', 'R5T2-8W4N', 'H6J9-3L0P']
+  },
+  bob: {
+    name: 'Bob Ferreira', role: 'Backend Developer',
+    password: 'hunter2',
+    mfaEnrolled: false,
+    secret: null,
+    backupCodes: []
+  }
+};
+
+/* =====================================================================
+   4. STATE
+   ===================================================================== */
+const state = { pendingUser: null, session: null, backupMode: false };
+const locks = {};                 // username -> { count, until }
+const usedSteps = {};             // username -> Set(time steps already consumed)
+const LOCK_THRESHOLD = 5;
+const LOCK_MS = 30000;
+let totpTimer = null, sessionTimer = null;
+
+/* =====================================================================
+   5. UI PRIMITIVES
+   ===================================================================== */
+function showStage(id) {
+  document.querySelectorAll('.stage').forEach(s => s.classList.add('hidden'));
+  const el = $(id);
+  el.classList.remove('hidden');
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = '';
+}
+
+function showError(id, text) { const e = $(id); e.textContent = text; e.classList.remove('hidden'); }
+function hideError(id) { $(id).classList.add('hidden'); }
+
+function log(message, level = 'info') {
+  const li = document.createElement('li');
+  li.className = 'log-item ' + level;
+  const t = document.createElement('span');
+  t.className = 'log-time';
+  t.textContent = new Date().toLocaleTimeString([], { hour12: false });
+  const m = document.createElement('span');
+  m.className = 'log-msg';
+  m.textContent = message;                 // textContent → no HTML injection
+  li.append(t, m);
+  const list = $('audit');
+  list.prepend(li);
+  while (list.children.length > 60) list.lastChild.remove();
+}
+
+/* =====================================================================
+   6. DEVICE TRUST (simulated device-bound token in localStorage)
+   ===================================================================== */
+const deviceKey = u => 'secureauth.device.' + u;
+
+function isDeviceTrusted(u) {
+  try {
+    const raw = localStorage.getItem(deviceKey(u));
+    if (!raw) return false;
+    const rec = JSON.parse(raw);
+    return rec.expiresAt > Date.now();
+  } catch { return false; }
+}
+
+function trustDevice(u) {
+  localStorage.setItem(deviceKey(u), JSON.stringify({
+    token: randomToken(16),
+    expiresAt: Date.now() + 30 * 24 * 3600 * 1000
+  }));
+}
+
+function revokeDevice(u) { localStorage.removeItem(deviceKey(u)); }
+
+/* =====================================================================
+   7. STAGE 1 — PASSWORD
+   ===================================================================== */
+$('login-form').addEventListener('submit', e => {
+  e.preventDefault();
+  hideError('login-error');
+
+  const u = $('username').value.trim().toLowerCase();
+  const p = $('password').value;
+  const rec = USERS[u];
+
+  const lock = locks[u];
+  if (lock && lock.until > Date.now()) {
+    const secs = Math.ceil((lock.until - Date.now()) / 1000);
+    showError('login-error', `Account temporarily locked. Try again in ${secs}s.`);
+    log(`Login blocked — "${u}" is rate-limited`, 'warn');
+    return;
+  }
+
+  if (!rec || !timingSafeEqual(rec.password, p)) {
+    lock.count = (lock?.count || 0) + 1;
+    if (lock.count >= LOCK_THRESHOLD) {
+      lock.until = Date.now() + LOCK_MS;
+      lock.count = 0;
+      log(`Account "${u}" locked for ${LOCK_MS / 1000}s after ${LOCK_THRESHOLD} failures`, 'warn');
+      showError('login-error', 'Too many failed attempts. Account locked for 30 seconds.');
+    } else {
+      showError('login-error', 'Invalid username or password.');
+      log(`Password authentication FAILED for "${u}" (attempt ${lock.count})`, 'error');
+    }
+    return;
+  }
+
+  delete locks[u];
+  log(`Password verified for "${u}" — factor 1/2 OK`, 'success');
+  state.pendingUser = u;
+
+  if (!rec.mfaEnrolled) {
+    log(`No second factor on "${u}" — forcing enrollment`, 'warn');
+    startEnrollment(u);
+    return;
+  }
+
+  if (isDeviceTrusted(u)) {
+    log('Trusted device token presented — second factor bypassed by policy', 'warn');
+    issueSession(u, 'Password + trusted device');
+    return;
+  }
+
+  startMfa(u);
+});
+
+/* =====================================================================
+   8. STAGE 2 — MFA CHALLENGE
+   ===================================================================== */
+function startMfa(u) {
+  state.pendingUser = u;
+  state.backupMode = false;
+  $('mfa-user').textContent = `${USERS[u].name} (@${u})`;
+  $('otp').value = '';
+  $('otp').maxLength = 6;
+  $('otp').placeholder = '000000';
+  $('otp-label').textContent = '6-digit code from your authenticator app';
+  $('revealed-code').textContent = '';
+  hideError('mfa-error');
+  $('trust-device').checked = false;
+  showStage('stage-mfa');
+  startTotpTimer();
+  $('otp').focus();
+}
+
+function startTotpTimer() {
+  stopTotpTimer();
+  const tick = () => {
+    const now = Date.now();
+    const elapsed = (now / 1000) % 30;
+    const remaining = Math.ceil(30 - elapsed);
+    $('totp-bar').style.width = (elapsed / 30 * 100) + '%';
+    $('totp-bar').style.background = remaining <= 5 ? 'var(--warn)' : 'var(--accent)';
+    $('totp-remaining').textContent = remaining;
+
+    const rev = $('revealed-code');
+    if (rev.textContent && state.pendingUser) {
+      const rec = USERS[state.pendingUser];
+      if (rec?.secret) rev.textContent = totpAt(base32Decode(rec.secret));
+    }
+  };
+  tick();
+  totpTimer = setInterval(tick, 200);
+}
+
+function stopTotpTimer() { if (totpTimer) { clearInterval(totpTimer); totpTimer = null; } }
+
+$('mfa-form').addEventListener('submit', e => {
+  e.preventDefault();
+  hideError('mfa-error');
+
+  const u = state.pendingUser;
+  if (!u) return;
+  const rec = USERS[u];
+  const raw = $('otp').value.trim();
+
+  /* --- backup code path --- */
+  if (state.backupMode) {
+    const code = raw.toUpperCase();
+    const idx = rec.backupCodes.indexOf(code);
+    if (idx === -1) {
+      showError('mfa-error', 'That backup code is not valid (or already used).');
+      log('Backup code REJECTED — no match in recovery set', 'error');
+      return;
+    }
+    rec.backupCodes.splice(idx, 1);
+    log(`Backup code accepted — ${rec.backupCodes.length} recovery codes remaining`, 'warn');
+    issueSession(u, 'Password + backup code');
+    return;
+  }
+
+  /* --- TOTP path --- */
+  const code = raw.replace(/\D/g, '');
+  if (code.length !== 6) {
+    showError('mfa-error', 'Enter the 6-digit code from your authenticator app.');
+    return;
+  }
+
+  const step = verifyTotp(rec.secret, code);
+  if (step === null) {
+    showError('mfa-error', 'Invalid or expired code. Check your device clock and try again.');
+    log('TOTP verification FAILED — code did not match any time step in ±1 window', 'error');
+    return;
+  }
+
+  if (usedSteps[u]?.has(step)) {
+    showError('mfa-error', 'This code was already used. Wait for the next one.');
+    log('TOTP REPLAY detected — time step already consumed', 'error');
+    return;
+  }
+  (usedSteps[u] ??= new Set()).add(step);
+
+  log('TOTP verified — factor 2/2 OK', 'success');
+
+  if ($('trust-device').checked) {
+    trustDevice(u);
+    log('Device registered as trusted for 30 days', 'warn');
+  }
+  issueSession(u, 'Password + TOTP');
+});
+
+$('mfa-back').addEventListener('click', () => {
+  stopTotpTimer();
+  state.pendingUser = null;
+  state.backupMode = false;
+  showStage('stage-login');
+  log('MFA challenge abandoned by user', 'info');
+});
+
+$('mfa-backup-toggle').addEventListener('click', () => {
+  state.backupMode = !state.backupMode;
+  hideError('mfa-error');
+  $('otp').value = '';
+  if (state.backupMode) {
+    $('otp-label').textContent = 'Single-use backup code';
+    $('otp').maxLength = 9;
+    $('otp').placeholder = 'XXXX-XXXX';
+    $('otp').classList.remove('code-input');
+    $('totp-window').classList.add('hidden');
+    $('mfa-backup-toggle').textContent = 'Use authenticator code';
+    log('Switched to backup-code recovery path', 'info');
+  } else {
+    $('otp-label').textContent = '6-digit code from your authenticator app';
+    $('otp').maxLength = 6;
+    $('otp').placeholder = '000000';
+    $('otp').classList.add('code-input');
+    $('totp-window').classList.remove('hidden');
+    $('mfa-backup-toggle').textContent = 'Use a backup code';
+  }
+  $('otp').focus();
+});
+
+/* Demo-only helper so the flow can be exercised without a phone. */
+$('reveal-code').addEventListener('click', () => {
+  const u = state.pendingUser;
+  const rec = USERS[u];
+  if (!rec?.secret) return;
+  $('revealed-code').textContent = totpAt(base32Decode(rec.secret));
+  log('Demo helper: current TOTP rendered in the UI', 'warn');
+});
+
+/* =====================================================================
+   9. STAGE 3 — ENROLLMENT
+   ===================================================================== */
+function startEnrollment(u) {
+  const rec = USERS[u];
+  if (!rec.secret) rec.secret = randomBase32(32);
+
+  $('enroll-secret').textContent = rec.secret;
+  $('enroll-otp').value = '';
+  hideError('enroll-error');
+
+  const uri = `otpauth://totp/SecureAuth:${u}?secret=${rec.secret}` +
+              `&issuer=SecureAuth&algorithm=SHA1&digits=6&period=30`;
+  renderQr(uri);
+
+  showStage('stage-enroll');
+  log(`MFA enrollment started for "${u}" — secret provisioned`, 'info');
+  $('enroll-otp').focus();
+}
+
+function renderQr(uri) {
+  const canvas = $('qr-canvas');
+  const fallback = $('qr-fallback');
+  fallback.textContent = '';
+
+  if (window.QRCode?.toCanvas) {
+    QRCode.toCanvas(canvas, uri, {
+      width: 156, margin: 1,
+      color: { dark: '#0b1020', light: '#e6edf7' }
+    }, err => {
+      if (err) { canvas.style.display = 'none'; fallback.textContent = uri; }
+      else { canvas.style.display = 'block'; }
+    });
+  } else {
+    canvas.style.display = 'none';
+    fallback.textContent = uri;           // offline fallback: manual URI entry
+  }
+}
+
+$('enroll-form').addEventListener('submit', e => {
+  e.preventDefault();
+  hideError('enroll-error');
+
+  const u = state.pendingUser;
+  const rec = USERS[u];
+  const code = $('enroll-otp').value.replace(/\D/g, '');
+
+  if (code.length !== 6) {
+    showError('enroll-error', 'Enter the 6-digit code shown by your authenticator app.');
+    return;
+  }
+  if (verifyTotp(rec.secret, code) === null) {
+    showError('enroll-error', 'Code did not match. Verify the secret and your device clock.');
+    log('MFA enrollment verification FAILED', 'error');
+    return;
+  }
+
+  rec.mfaEnrolled = true;
+  rec.backupCodes = Array.from({ length: 6 }, generateBackupCode);
+  log('MFA enrollment completed — TOTP factor is now active', 'success');
+
+  const box = $('backup-codes');
+  box.innerHTML = '';
+  rec.backupCodes.forEach(c => {
+    const d = document.createElement('div');
+    d.textContent = c;
+    box.appendChild(d);
+  });
+  showStage('stage-backup');
+});
+
+$('backup-continue').addEventListener('click', () => {
+  issueSession(state.pendingUser, 'Password + TOTP (enrolled)');
+});
+
+/* =====================================================================
+   10. STAGE 5 — SESSION
+   ===================================================================== */
+function issueSession(u, method) {
+  stopTotpTimer();
+  const token = randomToken(32);
+  state.session = {
+    user: u, method, token,
+    issuedAt: Date.now(),
+    expiresAt: Date.now() + 15 * 60 * 1000        // 15-minute access token
+  };
+
+  const rec = USERS[u];
+  $('dash-user').textContent = `${rec.name} (@${u}) · ${rec.role}`;
+  $('dash-assurance').textContent = method + ' · AAL2';
+  $('dash-token').textContent = token.slice(0, 32) + '…';
+  $('dash-device').textContent = isDeviceTrusted(u)
+    ? 'Yes — MFA may be skipped on this browser'
+    : 'No — full challenge required next sign-in';
+
+  showStage('stage-dashboard');
+  startSessionTimer();
+  log(`Session token issued for "${u}" via ${method}`, 'success');
+  log('Token propagated to relying services (15 min TTL)', 'info');
+}
+
+function startSessionTimer() {
+  clearInterval(sessionTimer);
+  const tick = () => {
+    if (!state.session) return;
+    const left = Math.max(0, state.session.expiresAt - Date.now());
+    const m = Math.floor(left / 60000);
+    const s = Math.floor((left % 60000) / 1000);
+    $('dash-expiry').textContent = `${m}m ${String(s).padStart(2, '0')}s`;
+    if (left <= 0) {
+      clearInterval(sessionTimer);
+      log('Session token expired — re-authentication required', 'warn');
+      signOut();
+    }
+  };
+  tick();
+  sessionTimer = setInterval(tick, 1000);
+}
+
+function signOut() {
+  clearInterval(sessionTimer);
+  stopTotpTimer();
+  const u = state.session?.user;
+  if (u) log(`Session terminated for "${u}"`, 'info');
+  state.session = null;
+  state.pendingUser = null;
+  state.backupMode = false;
+  $('password').value = '';
+  showStage('stage-login');
+}
+
+$('signout').addEventListener('click', signOut);
+
+$('revoke-device').addEventListener('click', () => {
+  const u = state.session?.user;
+  if (!u) return;
+  revokeDevice(u);
+  $('dash-device').textContent = 'No — full challenge required next sign-in';
+  log(`Trusted device token revoked for "${u}"`, 'warn');
+});
+
+/* =====================================================================
+   11. BOOT
+   ===================================================================== */
+log('SecureAuth gateway initialized — node eu-west-1a', 'info');
+log('Policy loaded: MFA required for all interactive logins', 'info');
+</script>
+</body>
+</html>
